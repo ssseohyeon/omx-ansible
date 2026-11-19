@@ -161,8 +161,7 @@ myself ansible_host=localhost ansible_connection=local ansible_user=<내계정�
 
 # 1.5부. 다른 사람에게 전달하기 (배포)
 
-**방법 A — git**: 비공개 저장소 https://github.com/ssseohyeon/omx-ansible
-(받을 사람을 collaborator로 초대 후)
+**방법 A — git**: 공개 저장소 https://github.com/ssseohyeon/omx-ansible
 
 ```bash
 git clone https://github.com/ssseohyeon/omx-ansible.git ~/omx-ansible
