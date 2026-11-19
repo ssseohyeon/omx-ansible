@@ -147,11 +147,18 @@ python3 -m venv .venv && .venv/bin/pip install ansible
 .venv/bin/ansible-playbook prepare_source.yml
 ```
 
-`inventory.ini` 의 `[omx]` 에 자기 자신을 추가:
+`inventory.ini` 의 `[omx]` 에 자기 자신을 추가 — 아래 한 줄을 복사해 실행하면
+내 계정명(`whoami`)이 자동으로 채워진다:
+
+```bash
+sed -i "/^\[omx\]/a myself ansible_host=localhost ansible_connection=local ansible_user=$(whoami)" inventory.ini
+```
+
+(직접 편집한다면 `ansible_user=` 뒤에 본인 리눅스 계정명 — `whoami` 로 확인 — 을 적으면 된다)
 
 ```ini
 [omx]
-myself ansible_host=localhost ansible_connection=local ansible_user=<내계정명>
+myself ansible_host=localhost ansible_connection=local ansible_user=pink   # 예: 계정이 pink인 PC
 ```
 
 이후 **1-4 → 1-5 → 1-6 을 똑같이** 진행하면 된다 (💻 표시 단계도 전부 새 PC에서 하는 것만 다름).
