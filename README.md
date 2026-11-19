@@ -38,6 +38,7 @@
 | `build.yml` | 가이드 ⑥ — rosbridge·python3-serial 설치 + 임피던스 빌드 |
 | `verify.yml` | 부록 B — 로봇 없이 가능한 정적 검증 |
 | `ping.yml` | 연결·sudo 확인만 |
+| `detect_ports.yml` | **로봇 포트 자동 등록** — 스캔→host_vars 생성→재배포 한 번에 |
 | `prepare_source.yml` | `~/open_manipulator` 가 없는 컴퓨터에서 원본 재조립 (업스트림+vendor) |
 | `make_usb.sh` | USB 배포 번들 생성 |
 | `vendor/` | 임피던스 패키지 + patch + 제어 패널 (저장소 자급자족용) |
@@ -112,31 +113,32 @@ python3 -m venv .venv
 - 끝에 verify가 "✅ 검증 통과"를 찍으면 소프트웨어 셋업 완료.
 - 전부 멱등: 실패하면 그냥 다시 실행. 컨테이너가 날아갔으면 `container.yml`+`build.yml`만 재실행.
 
-## 1-5. 🖥️ 로봇 연결 + 포트 식별 ★로봇 개체마다 필수★
+## 1-5. 로봇 연결 + 포트 자동 등록 ★로봇 개체마다 필수 · 어느 PC든 동일★
 
-1. 리더·팔로워 USB를 새 PC에 연결
-2. **팔로워 전원 어댑터 연결 + 스위치 ON** (팔로워는 외부 전원 필수! 리더는 USB만으로 됨)
-3. 식별 스캔:
+1. 🖥️ 리더·팔로워 USB를 새 PC에 연결
+2. 🖥️ **팔로워 전원 어댑터 연결 + 스위치 ON** (팔로워는 외부 전원 필수! 리더는 USB만으로 됨)
+3. 💻 자동 등록 — 스캔→판별→host_vars 생성→스크립트 재배포까지 한 번에:
 
 ```bash
-~/omx/scan_arms.sh
+.venv/bin/ansible-playbook detect_ports.yml --limit <호스트명>
 ```
 
-모터 ID로 자동 판별된다 — **ID 1~6 = 리더, ID 11~16 = 팔로워.**
-"모터 무응답"이 나오면 그 암의 전원부터 확인.
+모터 ID로 자동 판별한다 — **ID 1~6 = 리더, ID 11~16 = 팔로워.**
+pinklab01, pinklab02, … 어느 PC든 호스트명만 바꾸면 똑같이 동작한다.
 
-## 1-6. 💻 host_vars 작성 + 재배포
+- `SILENT=`로 실패하면 그 암의 전원부터 확인 (팔로워 전원 어댑터!)
+- `BUSY=`로 실패하면 launch가 떠 있는 것 — 전부 끄고 재시도
+- 사람 눈으로 직접 보고 싶을 때: 🖥️ `~/omx/scan_arms.sh` (모델·위치·HW에러까지 출력)
 
-스캔이 알려준 by-id 경로를 `host_vars/<호스트명>.yml` 에 기록 (pink.yml 참고):
+## 1-6. 💻 (폴백) host_vars 수동 작성
+
+1-5의 자동 등록이 안 되는 상황에만. `scan_arms.sh` 가 알려준 by-id 경로를
+`host_vars/<호스트명>.yml` 에 기록 (pink.yml 참고) 후 `source.yml --limit <호스트명>` 재배포:
 
 ```yaml
 omx_leader_port: /dev/serial/by-id/usb-ROBOTIS_OpenRB-150_<리더시리얼>-if00
 omx_follower_port: /dev/serial/by-id/usb-ROBOTIS_OpenRB-150_<팔로워시리얼>-if00
 omx_port_name: "{{ omx_leader_port }}"
-```
-
-```bash
-.venv/bin/ansible-playbook source.yml --limit <호스트명>   # 포트 반영 재배포
 ```
 
 > by-id 로 고정하는 이유: `/dev/ttyACM0/1` 번호는 **꽂는 순서에 따라 뒤바뀐다** (실제로 겪음).

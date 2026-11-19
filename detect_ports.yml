@@ -1,0 +1,92 @@
+# 로봇 포트 자동 등록 — 어느 PC든 동일하게 동작
+#
+# 하는 일 (명령 한 번):
+#   ① 대상 PC의 OpenRB-150 포트들을 읽기 전용 스캔 (모터 ID 1~6=리더, 11~16=팔로워)
+#   ② host_vars/<호스트명>.yml 자동 생성 (by-id 경로)
+#   ③ ~/omx 실행 스크립트에 포트 반영 재배포
+#
+# 사용 (로봇 USB 연결 + 팔로워 전원 ON 상태에서, launch는 모두 끈 뒤):
+#   .venv/bin/ansible-playbook detect_ports.yml --limit <호스트명>
+- name: 로봇 포트 자동 식별·등록
+  hosts: omx
+  tasks:
+    - name: 모터 스캔 (읽기 전용)
+      become: true
+      ansible.builtin.shell: |
+        docker exec -i {{ omx_container_name }} bash -c '
+        source /opt/ros/jazzy/setup.bash; source /root/ros2_ws/install/setup.bash
+        python3 -' <<'PYEOF'
+        import glob
+        from dynamixel_sdk import PortHandler, PacketHandler
+        for port in sorted(glob.glob('/dev/serial/by-id/usb-ROBOTIS_OpenRB-150_*')):
+            ph = PortHandler(port); pk = PacketHandler(2.0)
+            if not (ph.openPort() and ph.setBaudRate(1000000)):
+                print(f'BUSY={port}'); continue
+            ids = set()
+            for i in range(1, 21):
+                if pk.read2ByteTxRx(ph, i, 0)[1] == 0:
+                    ids.add(i)
+            ph.closePort()
+            if ids and ids <= set(range(1, 7)):
+                print(f'LEADER={port}')
+            elif ids & set(range(11, 17)):
+                print(f'FOLLOWER={port}')
+            elif not ids:
+                print(f'SILENT={port}')
+            else:
+                print(f'UNKNOWN={port}')
+        PYEOF
+      register: scan
+      changed_when: false
+
+    - name: 판별 결과 정리
+      ansible.builtin.set_fact:
+        omx_leader_port: "{{ scan.stdout_lines | select('match', '^LEADER=') | map('regex_replace', '^LEADER=', '') | first | default('') }}"
+        omx_follower_port: "{{ scan.stdout_lines | select('match', '^FOLLOWER=') | map('regex_replace', '^FOLLOWER=', '') | first | default('') }}"
+
+    - name: 리더·팔로워 모두 식별됐는지 확인
+      ansible.builtin.assert:
+        that:
+          - omx_leader_port | length > 0
+          - omx_follower_port | length > 0
+        fail_msg: >
+          식별 실패 — 스캔 결과: {{ scan.stdout_lines | default(['(출력 없음)']) }}.
+          SILENT=모터 무응답(그 암의 전원 어댑터·스위치 확인 — 팔로워는 외부 전원 필수),
+          BUSY=포트 사용 중(launch를 모두 끄고 재시도).
+        success_msg: "리더={{ omx_leader_port | basename }} / 팔로워={{ omx_follower_port | basename }}"
+
+    - name: omx_port_name 도 리더로
+      ansible.builtin.set_fact:
+        omx_port_name: "{{ omx_leader_port }}"
+
+    - name: host_vars/{{ inventory_hostname }}.yml 생성
+      delegate_to: localhost
+      become: false
+      ansible.builtin.copy:
+        dest: "{{ playbook_dir }}/host_vars/{{ inventory_hostname }}.yml"
+        content: |
+          # {{ inventory_hostname }} 로봇 개체별 설정 — detect_ports.yml 자동 생성
+          omx_leader_port: {{ omx_leader_port }}
+          omx_follower_port: {{ omx_follower_port }}
+          omx_port_name: "{{ omx_leader_port }}"
+        mode: "0644"
+
+    - name: 실행 스크립트에 포트 반영 재배포
+      ansible.builtin.template:
+        src: "templates/{{ item }}.j2"
+        dest: "{{ omx_helper_dir }}/{{ item }}"
+        mode: "0755"
+      loop:
+        - run_leader.sh
+        - run_follower.sh
+        - run_rosbridge.sh
+        - run_teleop.sh
+        - scan_arms.sh
+
+    - name: 완료
+      ansible.builtin.debug:
+        msg:
+          - "✅ {{ inventory_hostname }} 포트 등록 완료"
+          - "리더:   {{ omx_leader_port }}"
+          - "팔로워: {{ omx_follower_port }}"
+          - "바로 사용 가능: ~/omx/run_teleop.sh"
