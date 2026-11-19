@@ -161,8 +161,14 @@ myself ansible_host=localhost ansible_connection=local ansible_user=<내계정�
 
 # 1.5부. 다른 사람에게 전달하기 (배포)
 
-**방법 A — git**: 이 저장소를 통째로 올리면 끝 (`vendor/` 덕에 자급자족).
-받는 사람: `git clone <주소>` → 위 1-α 순서.
+**방법 A — git**: 비공개 저장소 https://github.com/ssseohyeon/omx-ansible
+(받을 사람을 collaborator로 초대 후)
+
+```bash
+git clone https://github.com/ssseohyeon/omx-ansible.git ~/omx-ansible
+```
+
+→ 위 1-α 순서. `vendor/` + `prepare_source.yml` 덕에 이 저장소만으로 자급자족.
 
 **방법 B — USB**:
 
