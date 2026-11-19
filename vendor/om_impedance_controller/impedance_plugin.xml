@@ -1,0 +1,7 @@
+<library path="impedance_controller">
+  <class name="impedance_controller/ImpedanceController" type="impedance_controller::ImpedanceController" base_class_type="controller_interface::ControllerInterface">
+  <description>
+    The gravity compensation controller compensates for gravity on a set of joints
+  </description>
+  </class>
+</library>

@@ -1,0 +1,73 @@
+# 통합가이드 ② — 도커 설치 (공식 apt 저장소 방식)
+# 가이드의 수동 트러블슈팅 2건이 여기서 구조적으로 해결된다:
+#  - "malformed docker.list": 복붙 대신 deb822_repository 모듈이 저장소 항목을 생성
+#  - "permission denied docker.sock": usermod 직후 meta: reset_connection 으로 재로그인 효과
+- name: 도커 설치
+  hosts: omx
+  become: true
+  tasks:
+    - name: 선행 패키지 설치
+      ansible.builtin.apt:
+        name:
+          - ca-certificates
+          - curl
+          - git
+          - rsync          # source.yml 의 synchronize 가 대상 PC에서도 필요
+          - python3-debian # deb822_repository 모듈 요구사항
+        state: present
+        update_cache: true
+        cache_valid_time: 3600
+
+    - name: 도커 GPG 키 등록
+      ansible.builtin.get_url:
+        url: https://download.docker.com/linux/ubuntu/gpg
+        dest: /etc/apt/keyrings/docker.asc
+        mode: "0644"
+
+    - name: 도커 apt 저장소 등록
+      ansible.builtin.deb822_repository:
+        name: docker
+        types: deb
+        uris: https://download.docker.com/linux/ubuntu
+        suites: "{{ ansible_distribution_release }}"
+        components: stable
+        signed_by: /etc/apt/keyrings/docker.asc
+      register: docker_repo
+
+    - name: 도커 엔진 + compose 플러그인 설치
+      ansible.builtin.apt:
+        name:
+          - docker-ce
+          - docker-ce-cli
+          - containerd.io
+          - docker-buildx-plugin
+          - docker-compose-plugin
+        state: present
+        update_cache: "{{ docker_repo.changed }}"
+
+    - name: 도커 데몬 활성화
+      ansible.builtin.systemd_service:
+        name: docker
+        enabled: true
+        state: started
+
+    - name: 사용자를 docker 그룹에 추가
+      ansible.builtin.user:
+        name: "{{ ansible_user }}"
+        groups: docker
+        append: true
+
+    # 가이드의 "★로그아웃 후 재로그인★"에 해당 — SSH 연결을 끊어
+    # 다음 태스크부터 새 그룹 정보로 접속하게 한다
+    - name: SSH 재접속 (docker 그룹 반영)
+      ansible.builtin.meta: reset_connection
+
+    - name: 설치 확인 — sudo 없이 docker 접근
+      become: false
+      ansible.builtin.command: docker version --format '{{ "{{" }}.Server.Version{{ "}}" }}'
+      register: docker_ver
+      changed_when: false
+
+    - name: 도커 버전
+      ansible.builtin.debug:
+        msg: "docker {{ docker_ver.stdout }} 설치 완료"

@@ -1,0 +1,35 @@
+#!/bin/bash
+# 텔레오퍼레이션 — 초기자세 이동(executor) 없이 바로 미러링 시작
+#
+# ⚠ 업스트림 omx_ai.launch.py의 초기자세 이동(전 관절 0도)은 이 팔로워 개체에서
+#   허용 범위를 넘어 과부하 에러(빨간불)를 냄 — 2026-11-18 pink에서 확인.
+#   대신 시작 전에 두 팔을 손으로 비슷한 자세로 맞추고 실행한다.
+LEADER="${1:-{{ omx_leader_port | default(omx_port_name) }}}"
+FOLLOWER="${2:-{{ omx_follower_port | default('/dev/ttyACM1') }}}"
+C={{ omx_container_name }}
+ENV="source /opt/ros/jazzy/setup.bash; source /root/ros2_ws/install/setup.bash; export ROS_DOMAIN_ID={{ ros_domain_id }} RMW_IMPLEMENTATION=rmw_zenoh_cpp"
+
+xhost +local:docker 2>/dev/null
+
+echo "⚠ 시작 전 체크:"
+echo "  - 팔로워 전원 어댑터 ON? (모터 LED 확인)"
+echo "  - 두 팔을 손으로 '비슷한 자세'로 맞췄나? (차이가 크면 시작 때 팔로워가 크게 점프함)"
+read -rp "준비됐으면 Enter (중단: Ctrl+C) "
+
+docker exec $C bash -c "pgrep -f rmw_zenohd >/dev/null || { $ENV; nohup ros2 run rmw_zenoh_cpp rmw_zenohd >/tmp/zenohd.log 2>&1 & sleep 2; echo 'zenohd 시작됨'; }"
+
+echo "[1/2] 팔로워 기동 (현재 자세 유지)..."
+docker exec $C bash -c "$ENV; nohup ros2 launch open_manipulator_bringup omx_f_follower_ai.launch.py port_name:=$FOLLOWER >/tmp/follower_ai.log 2>&1 &"
+sleep 12
+docker exec $C bash -c "$ENV; timeout 15 ros2 control list_controllers -c /controller_manager 2>/dev/null | grep -q 'arm_controller.*active'" \
+  && echo "팔로워 OK (arm_controller active)" \
+  || { echo "❌ 팔로워 기동 실패 — docker exec $C cat /tmp/follower_ai.log 확인"; exit 1; }
+
+read -rp "⚠ [2/2] 리더 팔을 잡고 Enter — 누르는 순간 토크가 들어가고 미러링이 시작됩니다 "
+
+# 리더 launch의 임피던스 스포너가 조용히 실패하는 경우가 있어(2026-11-18 확인) 자동 재스폰 워치독
+docker exec $C bash -c "$ENV; { sleep 25; ros2 control list_controllers -c /leader/controller_manager 2>/dev/null | grep -q impedance || ros2 run controller_manager spawner impedance_controller -c /leader/controller_manager; } >/tmp/imp_watchdog.log 2>&1 &"
+
+trap 'echo "팔로워 정리 중..."; docker exec $C bash -c "pkill -f omx_f_follower_ai; pkill -f config/omx_f_follower_ai" 2>/dev/null' EXIT
+
+docker exec -it $C bash -c "$ENV; ros2 launch open_manipulator_bringup omx_l_leader_ai.launch.py port_name:=$LEADER"

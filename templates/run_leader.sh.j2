@@ -1,0 +1,16 @@
+#!/bin/bash
+# OMX-L 리더암 실행 (임피던스 컨트롤러) — 웹 패널 "리더암·임피던스·중력보상" 탭용
+# ⚠ 반드시 사람이 팔을 잡은 상태에서 실행할 것 — launch 되는 순간 토크가 들어간다.
+# 포트가 다르면: ./run_leader.sh /dev/ttyACM1
+PORT="${1:-{{ omx_leader_port | default(omx_port_name) }}}"
+C={{ omx_container_name }}
+ENV="source /opt/ros/jazzy/setup.bash; source /root/ros2_ws/install/setup.bash; export ROS_DOMAIN_ID={{ ros_domain_id }} RMW_IMPLEMENTATION=rmw_zenoh_cpp"
+
+xhost +local:docker 2>/dev/null
+# zenohd (교환원) — 없으면 먼저 띄운다. 패널 가이드 터미널 ①에 해당. 계속 켜둬야 함.
+docker exec $C bash -c "pgrep -f rmw_zenohd >/dev/null || { $ENV; nohup ros2 run rmw_zenoh_cpp rmw_zenohd >/tmp/zenohd.log 2>&1 & sleep 2; echo 'zenohd 시작됨'; }"
+
+# 임피던스 스포너가 조용히 실패하는 경우가 있어(2026-11-18 확인) 자동 재스폰 워치독
+docker exec $C bash -c "$ENV; { sleep 25; ros2 control list_controllers -c /leader/controller_manager 2>/dev/null | grep -q impedance || ros2 run controller_manager spawner impedance_controller -c /leader/controller_manager; } >/tmp/imp_watchdog.log 2>&1 &"
+
+exec docker exec -it $C bash -c "$ENV; ros2 launch open_manipulator_bringup omx_l_leader_ai.launch.py port_name:=$PORT"

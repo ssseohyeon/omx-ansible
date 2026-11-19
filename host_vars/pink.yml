@@ -1,0 +1,6 @@
+# pink 로봇 개체별 설정 — 2026-11-18 실측 (dynamixel 모델 스캔으로 식별)
+# 리더:   OpenRB-150 시리얼 2FD8BCE2... (XL330 6개 응답, USB 전원 동작)
+# 팔로워: OpenRB-150 시리얼 C707EF98... (별도 전원 어댑터 필요)
+omx_leader_port: /dev/serial/by-id/usb-ROBOTIS_OpenRB-150_2FD8BCE25157375037202020FF122F13-if00
+omx_follower_port: /dev/serial/by-id/usb-ROBOTIS_OpenRB-150_C707EF98503059384C2E3120FF081924-if00
+omx_port_name: "{{ omx_leader_port }}"

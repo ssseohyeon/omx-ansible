@@ -1,0 +1,46 @@
+# 통합가이드 ③ — 소스 배포 ("방법 C": USB 대신 rsync)
+# 컨트롤 노드의 ~/open_manipulator (검증된 원본, untracked 임피던스 패키지 포함)를
+# 통째로 각 PC에 밀어넣는다. git clone 불필요 — 가이드 방법 A와 같은 원리.
+- name: 소스 배포
+  hosts: omx
+  tasks:
+    - name: 작업 폴더 생성
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: directory
+        mode: "0755"
+      loop:
+        - "{{ om_dir | dirname }}"
+        - "{{ omx_helper_dir }}"
+
+    - name: open_manipulator 폴더 동기화 (약 124MB, 첫 회만 오래 걸림)
+      ansible.posix.synchronize:
+        src: "{{ om_src }}/"
+        dest: "{{ om_dir }}"
+        archive: true
+        # delete 는 쓰지 않는다 — 대상 PC에서 컨테이너가 만든 root 소유 파일을
+        # 지우려다 실패할 수 있고, 원본에 없는 파일이 남아도 무해하다
+
+    - name: 웹 제어 패널 배포 (OMX-Control.html)
+      ansible.builtin.copy:
+        src: "{{ panel_src }}"
+        dest: "{{ omx_helper_dir }}/OMX-Control.html"
+        mode: "0644"
+
+    - name: 실행 도우미 스크립트 배포
+      ansible.builtin.template:
+        src: "templates/{{ item }}.j2"
+        dest: "{{ omx_helper_dir }}/{{ item }}"
+        mode: "0755"
+      loop:
+        - run_leader.sh
+        - run_follower.sh
+        - run_rosbridge.sh
+        - run_teleop.sh
+        - scan_arms.sh
+
+    - name: 임피던스 패키지 도착 확인
+      ansible.builtin.stat:
+        path: "{{ om_dir }}/ros2_controller/om_impedance_controller/package.xml"
+      register: imp_pkg
+      failed_when: not imp_pkg.stat.exists

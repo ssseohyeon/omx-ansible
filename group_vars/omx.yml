@@ -1,0 +1,24 @@
+# 공통 변수 — 모든 OMX 교육 PC에 적용
+# 로봇 개체별 값(port_name 등)은 host_vars/<호스트명>.yml 에서 덮어쓴다.
+
+# ── 컨트롤 노드(이 플레이북을 돌리는 컴퓨터) 쪽 원본 경로 ──
+# 검증된 원본: ~/open_manipulator (new_OMX 스냅샷과 동일함을 2026-11-18 확인)
+# 없는 컴퓨터에서는 prepare_source.yml 이 업스트림+vendor 로 재조립해 준다.
+om_src: "{{ lookup('env', 'HOME') }}/open_manipulator"
+panel_src: "{{ playbook_dir }}/vendor/OMX-Control.html"
+
+# ── 대상 PC 쪽 경로 ──
+om_dir: "/home/{{ ansible_user }}/omx_ws/open_manipulator"
+omx_helper_dir: "/home/{{ ansible_user }}/omx"
+
+# ── 컨테이너 ──
+omx_container_name: open_manipulator
+omx_image: "robotis/open-manipulator:5.0.0"
+
+# ── ROS 환경 (컨테이너 .bashrc와 동일하게) ──
+ros_domain_id: 30
+
+# ── 로봇 연결 포트 (기본값) ──
+# 리더암 OpenRB-150 보드. 열거 순서에 따라 바뀌므로
+# host_vars 에서 /dev/serial/by-id/usb-ROBOTIS_OpenRB-150_<시리얼>-if00 로 고정 권장.
+omx_port_name: /dev/ttyACM0

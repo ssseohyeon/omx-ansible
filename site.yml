@@ -1,0 +1,7 @@
+# 전체 셋업 — 빈 우분투(SSH+NOPASSWD sudo만 된 상태)에서 검증 통과까지
+# 사용: .venv/bin/ansible-playbook site.yml [--limit pinklab3]
+- import_playbook: docker.yml
+- import_playbook: source.yml
+- import_playbook: container.yml
+- import_playbook: build.yml
+- import_playbook: verify.yml

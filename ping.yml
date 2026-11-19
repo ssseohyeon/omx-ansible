@@ -1,0 +1,14 @@
+# 연결 확인만: .venv/bin/ansible-playbook ping.yml
+- name: 연결 확인
+  hosts: omx
+  gather_facts: false
+  tasks:
+    - name: ping
+      ansible.builtin.ping:
+
+    - name: sudo 확인
+      become: true
+      ansible.builtin.command: id -u
+      register: uid
+      changed_when: false
+      failed_when: uid.stdout != "0"

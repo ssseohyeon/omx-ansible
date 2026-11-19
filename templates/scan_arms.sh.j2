@@ -1,0 +1,47 @@
+#!/bin/bash
+# 연결된 OMX 암 자동 식별 — 어느 포트가 리더/팔로워인지 판별 (읽기 전용, 토크 없음)
+# 판별 근거: 리더(OMX-L)=모터 ID 1~6 (XL330), 팔로워(OMX-F)=모터 ID 11~16 (XL430+XL330)
+# 사용: ./scan_arms.sh   → 출력된 by-id 경로를 ansible host_vars/<호스트명>.yml 에 기록
+C={{ omx_container_name }}
+
+shopt -s nullglob
+devs=(/dev/serial/by-id/usb-ROBOTIS_OpenRB-150_*)
+if [ ${#devs[@]} -eq 0 ]; then
+  echo "❌ OpenRB-150 장치가 없습니다. USB 연결을 확인하세요. (ls /dev/serial/by-id/)"
+  exit 1
+fi
+
+for d in "${devs[@]}"; do
+  echo "━━ $d"
+  docker exec -i $C bash -c "source /opt/ros/jazzy/setup.bash; source /root/ros2_ws/install/setup.bash; python3 - '$d'" <<'PYEOF'
+import sys
+from dynamixel_sdk import PortHandler, PacketHandler
+MODELS = {1200: 'XL330-M288', 1190: 'XL330-M077', 1060: 'XL430-W250', 1020: 'XM430-W350'}
+port = sys.argv[1]
+ph = PortHandler(port); pk = PacketHandler(2.0)
+if not (ph.openPort() and ph.setBaudRate(1000000)):
+    print('   포트 열기 실패 — launch가 이 포트를 쓰고 있으면 먼저 종료하세요')
+    sys.exit(0)
+found = {}
+for i in range(1, 21):
+    m, r, e = pk.read2ByteTxRx(ph, i, 0)
+    if r == 0:
+        err = pk.read1ByteTxRx(ph, i, 70)[0]
+        pos = pk.read4ByteTxRx(ph, i, 132)[0]
+        if pos > 2**31: pos -= 2**32
+        found[i] = (m, err, round((pos - 2048) * 0.0879, 1))
+if not found:
+    print('   모터 무응답 → 이 암의 전원 어댑터·스위치를 확인하세요 (팔로워는 외부 전원 필수)')
+else:
+    ids = set(found)
+    role = '리더 (omx_leader_port)' if ids <= set(range(1, 7)) else \
+           '팔로워 (omx_follower_port)' if ids & set(range(11, 17)) else '알 수 없는 구성'
+    print(f'   → 역할: {role}')
+    for i, (m, err, deg) in sorted(found.items()):
+        flag = '  ⚠ HW에러! 전원 리셋 필요' if err else ''
+        print(f'   ID{i:2d} {MODELS.get(m, m)}  위치 {deg:+7.1f}°{flag}')
+ph.closePort()
+PYEOF
+done
+echo
+echo "→ 위의 '리더/팔로워' by-id 경로를 ansible 쪽 host_vars/<호스트명>.yml 에 적으세요 (README 참고)"

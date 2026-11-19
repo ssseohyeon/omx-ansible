@@ -1,0 +1,59 @@
+# 원본 소스 재조립 — open_manipulator 폴더가 없는 컴퓨터에서 한 번 실행
+#
+# 이 저장소만 받아도 셋업이 가능하도록, 검증된 원본을 다음 재료로 만들어낸다:
+#   업스트림 clone (26807fc 고정) + vendor/upstream-to-current.patch (수정 3개 파일)
+#   + vendor/om_impedance_controller (git에 없는 임피던스 패키지)
+# patch == 원본의 git diff 임은 2026-11-18 검증됨.
+#
+# 사용 (이 컴퓨터 자신에 만든다 — 인터넷 필요):
+#   .venv/bin/ansible-playbook prepare_source.yml
+- name: 원본 open_manipulator 재조립
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars_files:
+    - group_vars/omx.yml
+  vars:
+    upstream_repo: https://github.com/ROBOTIS-GIT/open_manipulator.git
+    upstream_commit: 26807fca45c472c315ad163b732aa6cc391ec999
+  tasks:
+    - name: 원본 폴더 존재 확인
+      ansible.builtin.stat:
+        path: "{{ om_src }}/ros2_controller/om_impedance_controller/package.xml"
+      register: existing
+
+    - name: 이미 있으면 건드리지 않음
+      when: existing.stat.exists
+      ansible.builtin.debug:
+        msg: "{{ om_src }} 에 임피던스 포함 원본이 이미 있음 — 그대로 사용"
+
+    - name: 재조립 (원본 없을 때만)
+      when: not existing.stat.exists
+      block:
+        - name: 업스트림 clone (기준 커밋 고정)
+          ansible.builtin.git:
+            repo: "{{ upstream_repo }}"
+            dest: "{{ om_src }}"
+            version: "{{ upstream_commit }}"
+
+        - name: 수정 3개 파일 patch 적용 (yaml·launch·xacro)
+          ansible.builtin.command: git apply "{{ playbook_dir }}/vendor/upstream-to-current.patch"
+          args:
+            chdir: "{{ om_src }}"
+
+        - name: 임피던스 패키지 투입
+          ansible.builtin.copy:
+            src: "{{ playbook_dir }}/vendor/om_impedance_controller"
+            dest: "{{ om_src }}/ros2_controller/"
+            mode: preserve
+
+        - name: 검증 — 패키지·patch 반영 확인
+          ansible.builtin.shell: |
+            test -f "{{ om_src }}/ros2_controller/om_impedance_controller/package.xml"
+            grep -q impedance_controller "{{ om_src }}/open_manipulator_bringup/launch/omx_l_leader_ai.launch.py"
+            grep -q 'Current Limit' "{{ om_src }}/open_manipulator_description/ros2_control/omx_l.ros2_control.xacro"
+          changed_when: false
+
+        - name: 완료
+          ansible.builtin.debug:
+            msg: "원본 재조립 완료: {{ om_src }} — 이제 site.yml 진행 가능"

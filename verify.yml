@@ -1,0 +1,66 @@
+# 통합가이드 ⑥ 후반 + 부록 B — 로봇 없이 가능한 검증만 수행
+#
+# 주의: `ros2 control list_controller_types`(가이드 ⑥-4)는 실행 중인
+# controller_manager 서비스가 필요해 launch 전에는 응답하지 않는다 (2026-11-18 pink에서 확인).
+# 대신 controller_manager가 타입 발견에 실제로 사용하는 것들을 정적으로 검사한다:
+# 플러그인 .so + pluginlib ament index + 클래스명·yaml 대조(가이드 함정 ④).
+- name: 설치 검증
+  hosts: omx
+  become: true
+  vars:
+    c: "{{ omx_container_name }}"
+    inst: /root/ros2_ws/install/om_impedance_controller
+  tasks:
+    - name: "[체크 4] 소스 폴더에 임피던스 패키지"
+      ansible.builtin.command: >
+        docker exec {{ c }} ls /root/ros2_ws/src/open_manipulator/ros2_controller/om_impedance_controller
+      changed_when: false
+
+    - name: "[체크 5] 빌드 산출물 — 라이브러리·플러그인 xml·pluginlib 등록"
+      ansible.builtin.command: >
+        docker exec {{ c }} bash -c
+        "test -f {{ inst }}/lib/libimpedance_controller.so
+        && test -f {{ inst }}/share/om_impedance_controller/impedance_plugin.xml
+        && test -f {{ inst }}/share/ament_index/resource_index/controller_interface__pluginlib__plugin/om_impedance_controller"
+      changed_when: false
+
+    - name: "[체크 6] 플러그인 클래스명 추출"
+      ansible.builtin.shell: >
+        docker exec {{ c }} grep -o 'class name="[^"]*"'
+        {{ inst }}/share/om_impedance_controller/impedance_plugin.xml
+      register: plugin_class
+      changed_when: false
+
+    - name: "[체크 6] 클래스명이 yaml type과 일치 (가이드 함정 ④)"
+      ansible.builtin.assert:
+        that:
+          - "'impedance_controller/ImpedanceController' in plugin_class.stdout"
+        fail_msg: >
+          plugin.xml 클래스명이 예상과 다름: {{ plugin_class.stdout }}
+          — hardware_controller_manager.yaml 의 type 과 글자 단위로 같아야 함 (가이드 ⑤ 4-1)
+        success_msg: "impedance_controller/ImpedanceController 등록 확인"
+
+    - name: "[체크 7] 원본 중력보상 컨트롤러 보존"
+      ansible.builtin.command: >
+        docker exec {{ c }} test -d /root/ros2_ws/install/om_gravity_compensation_controller
+      changed_when: false
+
+    - name: 시리얼 포트 확인 (로봇이 꽂혀 있을 때만 의미 있음)
+      ansible.builtin.stat:
+        path: "{{ omx_port_name }}"
+      register: port_chk
+
+    - name: 연결된 시리얼 장치 목록
+      ansible.builtin.shell: ls -1 /dev/serial/by-id/ 2>/dev/null || true
+      register: serials
+      changed_when: false
+
+    - name: 검증 완료 안내
+      ansible.builtin.debug:
+        msg:
+          - "✅ 검증 통과 ({{ inventory_hostname }})"
+          - "포트 {{ omx_port_name }}: {{ '연결됨' if port_chk.stat.exists else '현재 미연결 (로봇을 꽂으면 생김)' }}"
+          - "감지된 시리얼: {{ serials.stdout_lines | default([]) }}"
+          - "⚠ 이후는 수동입니다 — 사람이 팔을 잡은 상태에서 ~/omx/run_leader.sh"
+          - "   (가이드 ⑦: set_reference → damping 0.5 → stiffness 1.0 부터)"
+          - "최종 인식 확인(가이드 ⑥-4의 list_controller_types)은 launch가 떠 있을 때만 가능"

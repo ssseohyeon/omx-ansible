@@ -1,0 +1,61 @@
+# 통합가이드 ⑥ 전반 — rosbridge 설치 + 임피던스 컨트롤러 빌드 (컨테이너 안)
+# 컨테이너가 재생성돼 설치·빌드가 날아가도 이 플레이북 재실행 한 번이면 복구된다.
+- name: 컨테이너 안 설치·빌드
+  hosts: omx
+  become: true
+  vars:
+    c: "{{ omx_container_name }}"
+  tasks:
+    - name: 컨테이너 동작 확인
+      ansible.builtin.command: docker ps --filter name=^{{ c }}$ --filter status=running -q
+      register: ps_chk
+      changed_when: false
+      failed_when: ps_chk.stdout == ""
+
+    # python3-serial: scan_arms.sh(모터 식별 스캔)가 쓰는 dynamixel_sdk 의 의존성
+    - name: rosbridge + python3-serial 설치 (없을 때만)
+      ansible.builtin.shell: >
+        docker exec {{ c }} bash -c
+        'dpkg -s ros-jazzy-rosbridge-suite python3-serial >/dev/null 2>&1 && echo PRESENT
+        || (apt-get update && apt-get install -y ros-jazzy-rosbridge-suite python3-serial && echo INSTALLED)'
+      register: rb
+      changed_when: "'INSTALLED' in rb.stdout"
+
+    # 가이드 ⑥-2: 마운트가 오래된 스냅샷을 물고 있으면 소스가 안 보인다.
+    # → 가이드 처방대로 docker restart (down 아님!) 후 재확인
+    - name: 임피던스 소스가 컨테이너 안에 보이는지
+      ansible.builtin.command: >
+        docker exec {{ c }} ls /root/ros2_ws/src/open_manipulator/ros2_controller/om_impedance_controller
+      register: src_chk
+      changed_when: false
+      failed_when: false
+
+    - name: (소스 안 보임) 컨테이너 재시작으로 마운트 갱신
+      when: src_chk.rc != 0
+      block:
+        - name: docker restart
+          ansible.builtin.command: docker restart {{ c }}
+
+        - name: 재확인
+          ansible.builtin.command: >
+            docker exec {{ c }} ls /root/ros2_ws/src/open_manipulator/ros2_controller/om_impedance_controller
+          register: src_chk2
+          changed_when: false
+          failed_when: src_chk2.rc != 0
+          retries: 3
+          delay: 5
+          until: src_chk2.rc == 0
+
+    - name: 임피던스 컨트롤러 빌드
+      ansible.builtin.shell: >
+        docker exec {{ c }} bash -c
+        'source /opt/ros/jazzy/setup.bash;
+        [ -f /root/ros2_ws/install/setup.bash ] && source /root/ros2_ws/install/setup.bash;
+        cd /root/ros2_ws && colcon build --packages-select om_impedance_controller 2>&1'
+      register: build_out
+      changed_when: true
+      failed_when: "'Finished <<< om_impedance_controller' not in build_out.stdout"
+
+    - name: 빌드 결과
+      ansible.builtin.debug:
+        msg: "{{ build_out.stdout_lines | select('search', 'Finished|Summary') | list }}"

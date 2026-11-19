@@ -1,0 +1,15 @@
+# 로봇 개체별 변수 예시 — 실제 사용하려면 ".example" 을 떼고
+# 파일명을 인벤토리 호스트명과 맞춘다 (예: host_vars/pinklab3.yml)
+#
+# 값은 새 PC에서 ~/omx/scan_arms.sh 를 실행하면 알려준다 (README 1-5 단계):
+#   모터 ID 1~6 응답 = 리더, ID 11~16 응답 = 팔로워
+#   (launch가 떠 있으면 포트를 못 여니 전부 끈 상태에서 스캔)
+#
+# omx_leader_port: /dev/serial/by-id/usb-ROBOTIS_OpenRB-150_<리더시리얼>-if00
+# omx_follower_port: /dev/serial/by-id/usb-ROBOTIS_OpenRB-150_<팔로워시리얼>-if00
+# omx_port_name: "{{ omx_leader_port }}"
+#
+# ⚠ torque_scaling_factors · Current Limit 등 토크 튜닝값은 소스(yaml·xacro)에 박혀 있어
+#   이 변수로는 안 바뀐다. 로봇 개체가 다르면 통합가이드 부록 E를 보고
+#   원본 ~/open_manipulator 를 재튜닝 후 source.yml 재배포할 것.
+# ⚠ 초기자세 이동(전 관절 0도) 과부하 문제도 개체별로 다름 — README 트러블슈팅 7번.
