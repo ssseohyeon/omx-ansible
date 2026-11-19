@@ -6,7 +6,7 @@ C={{ omx_container_name }}
 
 shopt -s nullglob
 devs=(/dev/serial/by-id/usb-ROBOTIS_OpenRB-150_*)
-if [ ${#devs[@]} -eq 0 ]; then
+if [ -z "${devs[0]}" ]; then
   echo "❌ OpenRB-150 장치가 없습니다. USB 연결을 확인하세요. (ls /dev/serial/by-id/)"
   exit 1
 fi

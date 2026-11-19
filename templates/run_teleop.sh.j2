@@ -16,7 +16,7 @@ echo "  - 팔로워 전원 어댑터 ON? (모터 LED 확인)"
 echo "  - 두 팔을 손으로 '비슷한 자세'로 맞췄나? (차이가 크면 시작 때 팔로워가 크게 점프함)"
 read -rp "준비됐으면 Enter (중단: Ctrl+C) "
 
-docker exec $C bash -c "pgrep -f rmw_zenohd >/dev/null || { $ENV; nohup ros2 run rmw_zenoh_cpp rmw_zenohd >/tmp/zenohd.log 2>&1 & sleep 2; echo 'zenohd 시작됨'; }"
+docker exec $C bash -c "pgrep -x rmw_zenohd >/dev/null || { $ENV; nohup ros2 run rmw_zenoh_cpp rmw_zenohd >/tmp/zenohd.log 2>&1 & sleep 2; echo 'zenohd 시작됨'; }"
 
 echo "[1/2] 팔로워 기동 (현재 자세 유지)..."
 docker exec $C bash -c "$ENV; nohup ros2 launch open_manipulator_bringup omx_f_follower_ai.launch.py port_name:=$FOLLOWER >/tmp/follower_ai.log 2>&1 &"

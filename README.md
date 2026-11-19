@@ -81,19 +81,26 @@ ssh-copy-id <계정>@<호스트명>.local
 
 ```bash
 cd ~/Documents/개발/omx-ansible
+sudo apt install -y python3-venv  # 빈 우분투 24.04에는 없음 — 없으면 venv 생성이 ensurepip 오류로 실패
+rm -rf .venv                      # 다른 PC·USB에서 딸려온 .venv 는 못 쓴다 (아래 참고)
 python3 -m venv .venv
 .venv/bin/pip install ansible     # ansible-core 아님 — ansible.posix(synchronize) 필요
 ```
 
 > venv는 절대경로가 박히므로 폴더를 옮기면 재생성.
+> 폴더를 통째로 복사해 왔다면 남의 `.venv` 가 같이 들어 있을 수 있다 —
+> `Permission denied` 가 나면 이 경우이니 지우고 다시 만든다.
 
 ## 1-3. 💻 인벤토리에 추가 + 연결 확인
 
 `inventory.ini` 의 `[omx]` 아래에 호스트명 한 줄 추가 후:
 
 ```bash
-.venv/bin/ansible-playbook ping.yml
+.venv/bin/ansible-playbook ping.yml --limit <호스트명>
 ```
+
+> `--limit` 을 빼면 인벤토리의 다른 PC(pink 등)에도 접속을 시도한다.
+> `sudo: a password is required` 로 실패하면 1-0의 sudoers 줄이 빠진 것.
 
 ## 1-4. 💻 전체 셋업 실행
 
@@ -139,7 +146,12 @@ omx_port_name: "{{ omx_leader_port }}"
 이 저장소를 **git clone 또는 USB**로 새 PC에 가져왔다면, 🖥️ 새 PC에서 전 과정을 진행한다:
 
 ```bash
+# sudo 무비밀번호 등록 — localhost 방식에서도 필수 (비밀번호 1회 입력)
+echo "$(whoami) ALL=(ALL) NOPASSWD:ALL" | sudo tee /etc/sudoers.d/$(whoami)
+sudo apt update && sudo apt install -y python3-venv
+
 cd ~/omx-ansible                                   # 받은 폴더
+rm -rf .venv                                       # 딸려온 .venv 가 있으면 제거
 python3 -m venv .venv && .venv/bin/pip install ansible
 
 # 원본 open_manipulator 가 없으면 재조립 (인터넷 필요 · USB에 open_manipulator/ 가
@@ -162,7 +174,17 @@ myself ansible_host=localhost ansible_connection=local ansible_user=pink   # 예
 ```
 
 이후 **1-4 → 1-5 → 1-6 을 똑같이** 진행하면 된다 (💻 표시 단계도 전부 새 PC에서 하는 것만 다름).
-1-0의 SSH 서버·ssh-copy-id 는 localhost 방식에서는 불필요.
+단, 1-4의 전체 셋업은 **`sg docker -c` 로 감싸서** 실행한다:
+
+```bash
+sg docker -c ".venv/bin/ansible-playbook site.yml --limit myself"
+```
+
+> localhost 방식은 SSH 재접속이 없어서, 방금 추가된 docker 그룹이 현재 셸에 반영되지 않는다.
+> 그냥 돌리면 `docker.yml` 의 "sudo 없이 docker 접근" 확인에서 `permission denied ... docker.sock` 으로 멈춘다
+> (도커 자체는 설치된 상태 — 위 명령으로 다시 돌리면 끝까지 간다).
+
+1-0의 SSH 서버·ssh-copy-id 는 localhost 방식에서는 불필요 (sudoers 줄은 위에서 이미 등록).
 
 ---
 
@@ -260,6 +282,9 @@ omx-ansible(+ 있으면 open_manipulator 원본까지)를 USB에 담는다.
 | 11 | `scan_arms.sh` 에서 `No module named 'serial'` | 컨테이너에 python3-serial 없음 (dynamixel_sdk 의존성) | `build.yml` 이 설치함 — 재실행: `ansible-playbook build.yml --limit <호스트>` |
 | 12 | `pink.local` 등 `.local` 주소가 간헐적으로 안 풀림 | mDNS 일시 장애 | 잠시 후 재시도. 계속되면 inventory에 `ansible_host=<IP>` 지정 |
 | 13 | 재시작했더니 rosbridge·빌드가 사라짐 | `container.sh stop`/`compose down` 은 컨테이너를 **삭제**함 | **down 금지.** 재시작은 `docker restart open_manipulator`. 지워졌으면 `build.yml` 재실행으로 복구 |
+| 14 | venv 생성이 `ensurepip` 오류로 실패 (pinklab06) | 빈 우분투 24.04에는 `python3-venv` 가 없음 | `sudo apt install -y python3-venv` 후 재생성 |
+| 15 | venv 관련 `Permission denied` (pinklab06) | USB·복사로 **남의 `.venv`** 가 딸려 옴 (절대경로·소유자가 그 PC 것) | `rm -rf .venv` 후 새로 생성 |
+| 16 | localhost(단독) 설치 중 `permission denied ... docker.sock` 에서 멈춤 (pinklab06) | localhost 방식은 SSH 재접속이 없어 **docker 그룹이 현재 셸에 미반영** — 1번의 localhost판 | `sg docker -c ".venv/bin/ansible-playbook site.yml --limit myself"` 로 감싸 재실행 |
 
 ## 로봇을 다른 개체로 바꿀 때 (통합가이드 부록 E)
 

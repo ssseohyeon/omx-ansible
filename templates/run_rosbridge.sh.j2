@@ -5,6 +5,6 @@
 C={{ omx_container_name }}
 ENV="source /opt/ros/jazzy/setup.bash; source /root/ros2_ws/install/setup.bash; export ROS_DOMAIN_ID={{ ros_domain_id }} RMW_IMPLEMENTATION=rmw_zenoh_cpp"
 
-docker exec $C bash -c "pgrep -f rmw_zenohd >/dev/null || { $ENV; nohup ros2 run rmw_zenoh_cpp rmw_zenohd >/tmp/zenohd.log 2>&1 & sleep 2; echo 'zenohd 시작됨'; }"
+docker exec $C bash -c "pgrep -x rmw_zenohd >/dev/null || { $ENV; nohup ros2 run rmw_zenoh_cpp rmw_zenohd >/tmp/zenohd.log 2>&1 & sleep 2; echo 'zenohd 시작됨'; }"
 
 exec docker exec -it $C bash -c "$ENV; ros2 launch rosbridge_server rosbridge_websocket_launch.xml"

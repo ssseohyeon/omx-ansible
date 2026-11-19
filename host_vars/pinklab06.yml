@@ -1,0 +1,6 @@
+# pinklab06 로봇 개체별 설정 — 2026-11-19 scan_arms.sh 실측
+# 리더:   OpenRB-150 시리얼 2B0F2FE9... (ID 1~6 응답, USB 전원 동작)
+# 팔로워: OpenRB-150 시리얼 89460F6A... (ID 11~16 응답, 별도 전원 어댑터 필요)
+omx_leader_port: /dev/serial/by-id/usb-ROBOTIS_OpenRB-150_2B0F2FE95157375037202020FF120433-if00
+omx_follower_port: /dev/serial/by-id/usb-ROBOTIS_OpenRB-150_89460F6A5157375037202020FF0F0D1B-if00
+omx_port_name: "{{ omx_leader_port }}"
