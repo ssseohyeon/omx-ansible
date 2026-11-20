@@ -9,7 +9,8 @@ SRC="$(cd "$(dirname "$0")" && pwd)"
 RS="rsync -rt --no-perms --no-owner --no-group --delete"
 
 echo "[1/2] omx-ansible 복사 (.venv·.git 제외)..."
-$RS --exclude .venv --exclude .git "$SRC/" "$DEST/omx-ansible/"
+# --delete-excluded: USB에 예전 복사본의 .venv/.git 이 남아 있으면 같이 지움
+$RS --delete-excluded --exclude .venv --exclude .git "$SRC/" "$DEST/omx-ansible/"
 
 OM="$HOME/open_manipulator"
 if [ -d "$OM" ]; then
